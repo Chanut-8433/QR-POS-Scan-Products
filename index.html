@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f172a" />
+  <title>Smart POS System Offline</title>
+  <link rel="manifest" href="manifest.json" />
+  <style>
+    :root {
+      --bg: #0f172a; --card: rgba(17,24,39,.92); --line: rgba(255,255,255,.08);
+      --text: #f8fafc; --muted: #94a3b8; --primary: #2563eb; --primary2: #1d4ed8;
+      --ok: #16a34a; --warn: #f59e0b; --danger: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: linear-gradient(180deg, #020617, #0f172a 35%, #111827 100%);
+      color: var(--text); min-height: 100vh;
+    }
+    .wrap { max-width: 920px; margin: 0 auto; padding: 16px 16px 40px; }
+    h1 { margin: 8px 0 6px; font-size: 1.6rem; text-align: center; color: #fff; }
+    .tabs { display:grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+    .tab, button {
+      appearance:none; border:0; cursor:pointer; color:#fff; border-radius:14px;
+      padding:14px 16px; font-size:1rem; font-weight:800; transition: 0.2s;
+      background: var(--primary); box-shadow: 0 8px 18px rgba(37,99,235,.25);
+    }
+    .tab { background: rgba(255,255,255,.03); border:1px solid var(--line); box-shadow:none; }
+    .tab.active { background: var(--primary2); border-color: var(--primary); }
+    button.secondary { background:#334155; box-shadow:none; }
+    button.green { background: var(--ok); box-shadow:0 8px 18px rgba(22,163,74,.25); }
+    button.danger { background: var(--danger); box-shadow:0 8px 18px rgba(239,68,68,.25); }
+    .view { display:none; } .view.active { display:block; }
+    .card { background: var(--card); border:1px solid var(--line); border-radius:18px; padding:16px; margin-bottom:14px; box-shadow: 0 10px 30px rgba(0,0,0,.22); }
+    .scanner-stage { position: relative; overflow:hidden; border-radius:16px; background:#000; height:280px; margin:12px 0; border:1px solid var(--line); }
+    video { width:100%; height:100%; object-fit:cover; }
+    .overlay::before { content:""; position:absolute; left:15%; right:15%; top:20%; bottom:20%; border:2px solid var(--ok); border-radius:18px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.4); pointer-events:none; }
+    
+    /* เอฟเฟกต์แสงกระพริบเมื่อสแกนสำเร็จ */
+    #scan-flash { position:absolute; inset:0; background:rgba(34,197,94,0.5); opacity:0; pointer-events:none; transition: opacity 0.15s; z-index:10; }
+    
+    .item { border:1px solid var(--line); border-radius:16px; padding:12px; background:rgba(255,255,255,.02); margin-bottom: 8px; }
+    .row { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+    .qty-ctrl { display:inline-flex; align-items:center; gap:10px; background:rgba(255,255,255,0.05); border-radius:999px; padding:4px; }
+    .qty-ctrl button { width:34px; height:34px; padding:0; border-radius:999px; box-shadow:none; background: var(--primary2); }
+    .grand { position:sticky; bottom:10px; border:1px solid var(--line); background:rgba(2,6,23,0.9); border-radius:20px; padding:16px 20px; backdrop-filter: blur(10px); }
+    .total-val { font-size:1.7rem; font-weight:900; }
+    input { width:100%; padding:14px; border-radius:14px; border:1px solid var(--line); background:rgba(255,255,255,.04); color:var(--text); font-size:1rem; margin-bottom: 12px; outline: none; }
+    #status { font-size: 0.9rem; padding: 8px; border-radius: 8px; margin-top: 5px; text-align: center; }
+    .status.ok { color: #86efac; background: rgba(22,163,74,0.1); }
+    .status.warn { color: #fcd34d; background: rgba(245,158,11,0.1); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Smart POS System</h1>
+    <div class="tabs">
+      <button class="tab active" data-tab="scanView">สแกนขาย</button>
+      <button class="tab" data-tab="createView">สร้าง QR</button>
+    </div>
+
+    <section id="scanView" class="view active">
+      <div class="card">
+        <div class="scanner-stage">
+          <video id="video" playsinline muted></video>
+          <div class="overlay"></div>
+          <div id="scan-flash"></div>
+        </div>
+        <div id="status" class="status warn">ระบบพร้อมสแกน</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px;">
+          <button id="startBtn">เปิดกล้อง</button><button id="stopBtn" class="secondary" disabled>ปิดกล้อง</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="row"><b>รายการสินค้า</b><button id="clearBtn" class="danger" style="padding:6px 12px; font-size:0.8rem;">ล้างบิล</button></div>
+        <div id="list" style="margin-top:10px;"></div>
+      </div>
+      <div class="grand">
+        <div id="discount-area" style="display:none; color:var(--warn); font-size:0.92rem; margin-bottom:8px; border-bottom:1px dashed var(--line); padding-bottom:8px;"></div>
+        <div class="row">
+          <div><small style="color:var(--muted)">ยอดชำระสุทธิ</small><div id="total" class="total-val">฿0.00</div></div>
+          <button id="shareBillBtn" class="green">ส่งยอด & ล้างบิล</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="createView" class="view">
+      <div class="card">
+        <label style="display:block; margin-bottom:5px; font-size:0.9rem; color:var(--muted);">ชื่อรายการ / คูปอง</label>
+        <input id="nameInput" type="text" placeholder="ระบุชื่อสินค้าหรือชื่อส่วนลด" />
+        <label style="display:block; margin-bottom:5px; font-size:0.9rem; color:var(--muted);">ราคา / มูลค่าส่วนลด</label>
+        <input id="priceInput" type="number" inputmode="decimal" placeholder="0.00" />
+        <div class="row" style="gap:10px;">
+          <button id="genProductBtn" style="flex:1;">สร้าง QR สินค้า</button>
+          <button id="genDiscountBtn" class="warn" style="flex:1; background:var(--warn);">สร้าง QR ส่วนลด</button>
+        </div>
+        <div id="qrResultArea" style="display:none; margin-top:20px; text-align:center;">
+          <canvas id="qrCanvas" width="300" height="420" style="max-width:100%; border-radius:15px; background: #fff;"></canvas>
+          <button id="downloadQrBtn" class="secondary" style="width:100%; margin-top:15px;">💾 แชร์หรือบันทึกรูปภาพ</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <audio id="beep-sound" src="https://assets.mixkit.co/active_storage/sfx/700/700-preview.mp3" preload="auto"></audio>
+
+  <script src="https://cdn.jsdelivr.net/npm/qr-scanner@1.4.2/qr-scanner.legacy.min.js"></script>
+  <script src="qrgen.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
